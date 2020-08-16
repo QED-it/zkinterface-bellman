@@ -82,10 +82,11 @@ pub fn zkif_backend(
     let circuit = ZKIFCircuit { messages };
 
     let circuit_msg = messages.last_circuit().ok_or(SynthesisError::AssignmentMissing)?;
+    let proving = circuit_msg.connections().unwrap().values().is_some();
 
     let mut rng = OsRng::new()?;
 
-    if circuit_msg.r1cs_generation() {
+    if !proving { // Setup.
         let params = generate_random_parameters::<Bls12, _, _>(
             circuit.clone(),
             &mut rng,
@@ -94,9 +95,8 @@ pub fn zkif_backend(
         // Store params.
         let f = File::create(&key_path)?;
         params.write(f)?;
-    }
+    } else {
 
-    if circuit_msg.witness_generation() {
         // Load params.
         let mut fs = File::open(&key_path)?;
         let params = Parameters::<Bls12>::read(&mut fs, false)?;
@@ -123,7 +123,7 @@ fn test_zkif_backend() {
 
     // Setup.
     {
-        let mut messages = Messages::new(1);
+        let mut messages = Messages::new();
         messages.read_file(test_dir.join("r1cs.zkif")).unwrap();
         messages.read_file(test_dir.join("circuit_r1cs.zkif")).unwrap();
 
@@ -132,7 +132,7 @@ fn test_zkif_backend() {
 
     // Prove.
     {
-        let mut messages = Messages::new(1);
+        let mut messages = Messages::new();
         messages.read_file(test_dir.join("witness.zkif")).unwrap();
         messages.read_file(test_dir.join("circuit_witness.zkif")).unwrap();
 

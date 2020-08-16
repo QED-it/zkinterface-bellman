@@ -2,10 +2,11 @@ use zkinterface_bellman::zkif_backend::{Messages, zkif_backend};
 use std::io;
 use std::io::Read;
 use std::env;
+use std::error::Error;
 
 
-pub fn main() -> Result<(), Box<std::error::Error>> {
-    let mut messages = Messages::new(1);
+pub fn main() -> Result<(), Box<dyn Error>> {
+    let mut messages = Messages::new();
 
     let mut buffer = vec![];
     io::stdin().read_to_end(&mut buffer)?;

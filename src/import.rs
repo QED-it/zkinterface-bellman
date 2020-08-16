@@ -9,8 +9,8 @@ use pairing::Engine;
 use sapling_crypto::circuit::num::AllocatedNum;
 use std::collections::HashMap;
 use zkinterface::{
-    reading::{Constraint, Messages, Term},
-    writing::{CircuitOwned, VariablesOwned},
+    Messages, CircuitOwned, VariablesOwned, Result,
+    reading::{Constraint, Term},
 };
 
 
@@ -55,8 +55,8 @@ pub fn enforce<E, CS>(cs: &mut CS, vars: &HashMap<u64, Variable>, constraint: &C
 pub fn call_gadget<E, CS>(
     cs: &mut CS,
     inputs: &[AllocatedNum<E>],
-    exec_fn: &Fn(&[u8]) -> Result<Messages, String>,
-) -> Result<(Vec<AllocatedNum<E>>), SynthesisError>
+    exec_fn: &dyn Fn(&[u8]) -> Result<Messages>,
+) -> Result<Vec<AllocatedNum<E>>>
     where E: Engine,
           CS: ConstraintSystem<E>
 {
@@ -83,13 +83,13 @@ pub fn call_gadget<E, CS>(
             values,
         },
         free_variable_id,
-        r1cs_generation: true,
         field_maximum: None,
+        configuration: None,
     };
 
     // Prepare the call.
     let mut call_buf = vec![];
-    call.write(&mut call_buf)?;
+    call.write_into(&mut call_buf)?;
 
     // Call.
     let messages = exec_fn(&call_buf).or(Err(SynthesisError::Unsatisfiable))?;

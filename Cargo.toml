@@ -14,12 +14,12 @@ path = "src/bin.rs"
 
 [dependencies]
 num-bigint = "0.2.2"
-ff = { git = "https://github.com/zcash/librustzcash" }
-pairing = { git = "https://github.com/zcash/librustzcash" } # "0.14.2"
-bellman = { git = "https://github.com/zcash/librustzcash" } # "0.1.0"
-sapling-crypto = { git = "https://github.com/zcash/librustzcash" }
+ff = { git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
+pairing = { git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" } # "0.14.2"
+bellman = { git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" } # "0.1.0"
+sapling-crypto = { git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
 rand = "0.4"
-zkinterface = "1.0.6"
+zkinterface = "1.1.3"
 
 [dev-dependencies]
 blake2-rfc = { git = "https://github.com/gtank/blake2-rfc", rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9" }
