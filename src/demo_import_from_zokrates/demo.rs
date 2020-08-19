@@ -2,18 +2,18 @@ use bellman::ConstraintSystem;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use sapling_crypto::circuit::num::AllocatedNum;
 use std::env;
+use crate::import::call_gadget;
+use crate::test_cs::TestConstraintSystem;
 use super::exec_zokrates::exec_zokrates;
-use super::super::import::call_gadget;
-use super::TestConstraintSystem;
 
 #[test]
-fn test_import() {
+fn test_import_from_zokrates() {
     /*
         a^2 + b^2 == c^2
     */
 
     if env::var("ZOKRATES_HOME").is_err() {
-        println!("No ZOKRATES_HOME in environment, skipping test");
+        println!("No ZOKRATES_HOME in environment, skipping demo_import_from_zokrates");
         return;
     }
 

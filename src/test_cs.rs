@@ -7,17 +7,13 @@ use bellman::{
     SynthesisError,
     Variable,
 };
-use blake2_rfc::blake2s::Blake2s;
-use byteorder::{BigEndian, ByteOrder};
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use ff::{Field, PrimeField};
 use pairing::Engine;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Write;
 
-pub mod demo;
-pub mod exec_zokrates;
 
 #[derive(Debug)]
 enum NamedObject {
@@ -96,35 +92,6 @@ fn proc_lc<E: Engine>(
     }
 
     map
-}
-
-fn hash_lc<E: Engine>(
-    terms: &[(Variable, E::Fr)],
-    h: &mut Blake2s,
-)
-{
-    let map = proc_lc::<E>(terms);
-
-    let mut buf = [0u8; 9 + 32];
-    BigEndian::write_u64(&mut buf[0..8], map.len() as u64);
-    h.update(&buf[0..8]);
-
-    for (var, coeff) in map {
-        match var.0.get_unchecked() {
-            Index::Input(i) => {
-                buf[0] = b'I';
-                BigEndian::write_u64(&mut buf[1..9], i as u64);
-            }
-            Index::Aux(i) => {
-                buf[0] = b'A';
-                BigEndian::write_u64(&mut buf[1..9], i as u64);
-            }
-        }
-
-        coeff.into_repr().write_be(&mut buf[9..]).unwrap();
-
-        h.update(&buf);
-    }
 }
 
 fn eval_lc<E: Engine>(
@@ -229,31 +196,6 @@ impl<E: Engine> TestConstraintSystem<E> {
         s
     }
 
-    pub fn hash(&self) -> String {
-        let mut h = Blake2s::new(32);
-        {
-            let mut buf = [0u8; 24];
-
-            BigEndian::write_u64(&mut buf[0..8], self.inputs.len() as u64);
-            BigEndian::write_u64(&mut buf[8..16], self.aux.len() as u64);
-            BigEndian::write_u64(&mut buf[16..24], self.constraints.len() as u64);
-            h.update(&buf);
-        }
-
-        for constraint in &self.constraints {
-            hash_lc::<E>(constraint.0.as_ref(), &mut h);
-            hash_lc::<E>(constraint.1.as_ref(), &mut h);
-            hash_lc::<E>(constraint.2.as_ref(), &mut h);
-        }
-
-        let mut s = String::new();
-        for b in h.finalize().as_ref() {
-            s += &format!("{:02x}", b);
-        }
-
-        s
-    }
-
     pub fn which_is_unsatisfied(&self) -> Option<&str> {
         for &(ref a, ref b, ref c, ref path) in &self.constraints {
             let mut a = eval_lc::<E>(a.as_ref(), &self.inputs, &self.aux);
@@ -299,11 +241,11 @@ impl<E: Engine> TestConstraintSystem<E> {
         assert_eq!(expected.len() + 1, self.inputs.len());
 
         for (a, b) in self.inputs.iter().skip(1).zip(expected.iter())
-            {
-                if &a.0 != b {
-                    return false;
-                }
+        {
+            if &a.0 != b {
+                return false;
             }
+        }
 
         return true;
     }
@@ -353,14 +295,14 @@ fn compute_path(ns: &[String], this: String) -> String {
 
     let mut needs_separation = false;
     for ns in ns.iter().chain(Some(&this).into_iter())
-        {
-            if needs_separation {
-                name += "/";
-            }
-
-            name += ns;
-            needs_separation = true;
+    {
+        if needs_separation {
+            name += "/";
         }
+
+        name += ns;
+        needs_separation = true;
+    }
 
     name
 }

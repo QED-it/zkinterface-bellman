@@ -14,6 +14,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output};
 use zkinterface::{
+    Result,
     reading::{
         Messages,
         parse_call,
@@ -22,7 +23,7 @@ use zkinterface::{
 };
 
 
-pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages, String> {
+pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages> {
     let (call, inputs) = parse_call(call_msg).unwrap();
 
     // Non-contiguous IDs are not supported by ZoKrates yet.
@@ -31,13 +32,13 @@ pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages, String> {
     assert!(is_contiguous(1, input_ids));
     assert_eq!(1 + input_ids.len() as u64, call.free_variable_id());
 
-    let program = "src/test/demo.code";
+    let program = "src/demo_import_from_zokrates/demo.code";
     let program = env::current_dir().unwrap().join(program).into_os_string().into_string().unwrap();
     let zokrates_home = env::var("ZOKRATES_HOME").unwrap();
     let zokrates_home = Path::new(&zokrates_home);
-    let make_zokrates_command = || { Command::new("src/test/exec_zokrates") };
+    let make_zokrates_command = || { Command::new("src/demo_import_from_zokrates/exec_zokrates") };
 
-    let mut messages = Messages::new(call.free_variable_id());
+    let mut messages = Messages::new_filtered(call.free_variable_id());
 
     {
         // Write Call message -> call.zkif
@@ -65,7 +66,8 @@ pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages, String> {
             messages.read_file(zokrates_home.join("circuit_r1cs.zkif"))?;
         }
 
-        if call.witness_generation() {
+        let witness_generation = inputs.len() > 0 && inputs[0].value.len() > 0;
+        if witness_generation {
             // Compute assignment.
             {
                 let mut cmd = make_zokrates_command();
