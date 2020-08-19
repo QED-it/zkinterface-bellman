@@ -17,6 +17,7 @@ use std::fs::File;
 use std::path::Path;
 use super::import::{enforce, le_to_fr};
 pub use zkinterface::reading::Messages;
+use std::error::Error;
 
 
 /// A circuit instance built from zkif messages.
@@ -70,49 +71,57 @@ impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
 }
 
 
-/// Process a circuit.
-pub fn zkif_backend(
+pub fn setup(
     messages: &Messages,
-    out_dir: &Path,
-) -> Result<(), SynthesisError>
+    workspace: &Path,
+) -> Result<(), Box<dyn Error>>
 {
-    let key_path = out_dir.join("key");
-    let proof_path = out_dir.join("proof");
+    let key_path = workspace.join("bellman-pk");
 
     let circuit = ZKIFCircuit { messages };
 
-    let circuit_msg = messages.last_circuit().ok_or(SynthesisError::AssignmentMissing)?;
-    let proving = circuit_msg.connections().unwrap().values().is_some();
-
     let mut rng = OsRng::new()?;
+    let params = generate_random_parameters::<Bls12, _, _>(
+        circuit.clone(),
+        &mut rng,
+    )?;
 
-    if !proving { // Setup.
-        let params = generate_random_parameters::<Bls12, _, _>(
-            circuit.clone(),
-            &mut rng,
-        )?;
+    // Store params.
+    let f = File::create(&key_path)?;
+    params.write(f)?;
 
-        // Store params.
-        let f = File::create(&key_path)?;
-        params.write(f)?;
-    } else {
-
-        // Load params.
-        let mut fs = File::open(&key_path)?;
-        let params = Parameters::<Bls12>::read(&mut fs, false)?;
-
-        let proof = create_random_proof(
-            circuit,
-            &params,
-            &mut rng,
-        )?;
-
-        // Store proof.
-        let f = File::create(proof_path)?;
-        proof.write(f)?;
-    }
     Ok(())
 }
+
+
+pub fn prove(
+    messages: &Messages,
+    workspace: &Path,
+) -> Result<(), Box<dyn Error>>
+{
+    let key_path = workspace.join("bellman-pk");
+    let proof_path = workspace.join("bellman-proof");
+
+    let circuit = ZKIFCircuit { messages };
+
+    // Load params.
+    let mut fs = File::open(&key_path)?;
+    let params = Parameters::<Bls12>::read(&mut fs, false)?;
+
+    let mut rng = OsRng::new()?;
+    let proof = create_random_proof(
+        circuit,
+        &params,
+        &mut rng,
+    )?;
+
+    // Store proof.
+    let f = File::create(proof_path)?;
+    proof.write(f)?;
+
+    Ok(())
+}
+
 
 #[test]
 fn test_zkif_backend() {
@@ -127,7 +136,7 @@ fn test_zkif_backend() {
         messages.read_file(test_dir.join("r1cs.zkif")).unwrap();
         messages.read_file(test_dir.join("circuit_r1cs.zkif")).unwrap();
 
-        zkif_backend(&messages, out_dir).unwrap();
+        setup(&messages, out_dir).unwrap();
     }
 
     // Prove.
@@ -136,6 +145,6 @@ fn test_zkif_backend() {
         messages.read_file(test_dir.join("witness.zkif")).unwrap();
         messages.read_file(test_dir.join("circuit_witness.zkif")).unwrap();
 
-        zkif_backend(&messages, out_dir).unwrap();
+        prove(&messages, out_dir).unwrap();
     }
 }
