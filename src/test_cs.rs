@@ -1,4 +1,6 @@
 // TestConstraintSystem taken from https://github.com/zcash/librustzcash/
+// License MIT
+// Copyright (c) 2017-2019 Electric Coin Company
 
 use bellman::{
     ConstraintSystem,

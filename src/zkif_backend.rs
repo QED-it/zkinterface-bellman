@@ -18,6 +18,7 @@ use std::path::Path;
 use super::import::{enforce, le_to_fr};
 pub use zkinterface::reading::Messages;
 use std::error::Error;
+use crate::test_cs::TestConstraintSystem;
 
 
 /// A circuit instance built from zkif messages.
@@ -71,6 +72,29 @@ impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
 }
 
 
+pub fn validate(messages: &Messages, print: bool) -> Result<(), Box<dyn Error>> {
+    let circuit = ZKIFCircuit { messages };
+    let mut cs = TestConstraintSystem::<Bls12>::new();
+    circuit.synthesize(&mut cs)?;
+
+    if print {
+        eprintln!("{}", cs.pretty_print());
+    }
+
+    match cs.which_is_unsatisfied() {
+        None => {
+            eprintln!("Satisfied: YES");
+            Ok(())
+        }
+        Some(constraint) => {
+            eprintln!("Satisfied: NO");
+            eprintln!("This constraint is not satisfied: {}", constraint);
+            Err("The witness does not satisfy the constraints.".into())
+        }
+    }
+}
+
+
 pub fn setup(
     messages: &Messages,
     workspace: &Path,
@@ -92,7 +116,6 @@ pub fn setup(
 
     Ok(())
 }
-
 
 pub fn prove(
     messages: &Messages,
@@ -121,7 +144,6 @@ pub fn prove(
 
     Ok(())
 }
-
 
 #[test]
 fn test_zkif_backend() {

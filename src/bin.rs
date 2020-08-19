@@ -1,5 +1,5 @@
 use zkinterface::{Messages, Result};
-use zkinterface_bellman::zkif_backend::{setup, prove};
+use zkinterface_bellman::zkif_backend::{setup, prove, validate};
 use std::io;
 use std::io::Read;
 use std::env;
@@ -7,11 +7,19 @@ use std::env;
 
 const USAGE: &str = "Bellman prover.
 
-Usage:
+Validate that the witness satisfies the constraints:
+    zkif_bellman validate
+
+Print the circuit in a text-form:
+    zkif_bellman print
+
+Generate public parameters:
     zkif_bellman setup <workspace>
+
+Generate a proof using the public parameters:
     zkif_bellman prove <workspace>
 
-The input circuit and witness are read from stdin in zkInterface format.
+The circuit and witness are read from stdin in zkInterface format.
 The filenames of keys and proofs are derived from the workspace argument; defaults to the current directory.
 
 ";
@@ -33,6 +41,8 @@ pub fn main() -> Result<()> {
     let workspace = env::current_dir()?;
 
     match &command[..] {
+        "validate" => validate(&messages, false),
+        "print" => validate(&messages, true),
         "setup" => setup(&messages, &workspace),
         "prove" => prove(&messages, &workspace),
         _ => {
