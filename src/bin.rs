@@ -8,15 +8,19 @@ use std::env;
 const USAGE: &str = "Bellman prover.
 
 Validate that the witness satisfies the constraints:
+
     zkif_bellman validate
 
 Print the circuit in a text-form:
+
     zkif_bellman print
 
 Generate public parameters:
+
     zkif_bellman setup <workspace>
 
 Generate a proof using the public parameters:
+
     zkif_bellman prove <workspace>
 
 The circuit and witness are read from stdin in zkInterface format.
