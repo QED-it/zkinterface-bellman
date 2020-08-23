@@ -26,7 +26,8 @@ pairing = { version = "0.14.2", git = "https://github.com/zcash/librustzcash", r
 bellman = { version = "0.1.0", git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
 sapling-crypto = { version = "0.0.1", git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
 
-zkinterface = { version = "1.1.4", path = "../zkinterface/rust" }
+zkinterface = { version = "1.1.4" }
+#zkinterface = { version = "1.1.4", path = "../zkinterface/rust" }
 
 rand = "0.4"
 num-bigint = { version = "0.2.2", optional = true}
