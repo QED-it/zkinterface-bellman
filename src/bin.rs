@@ -1,5 +1,5 @@
 use zkinterface::{Messages, Result};
-use zkinterface_bellman::zkif_backend::{setup, prove, validate};
+use zkinterface_bellman::zkif_backend::{setup, prove, verify, validate};
 use std::io;
 use std::io::Read;
 use std::env;
@@ -49,6 +49,7 @@ pub fn main() -> Result<()> {
         "print" => validate(&messages, true),
         "setup" => setup(&messages, &workspace),
         "prove" => prove(&messages, &workspace),
+        "verify" => verify(&messages, &workspace),
         _ => {
             eprintln!("{}", USAGE);
             Err(format!("Unknown command {}", command).into())

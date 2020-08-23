@@ -2,15 +2,18 @@ use bellman::{
     Circuit,
     ConstraintSystem,
     groth16::{
-        create_random_proof,
         generate_random_parameters,
+        create_random_proof,
+        prepare_verifying_key,
+        verify_proof,
         Parameters,
+        Proof,
     },
     SynthesisError,
     Variable,
 };
 use pairing::{bls12_381::Bls12, Engine};
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use rand::OsRng;
 use sapling_crypto::circuit::num::AllocatedNum;
 use std::collections::HashMap;
@@ -131,8 +134,8 @@ pub fn setup(
     )?;
 
     // Store params.
-    let f = File::create(&key_path)?;
-    params.write(f)?;
+    let file = File::create(&key_path)?;
+    params.write(file)?;
 
     Ok(())
 }
@@ -148,8 +151,10 @@ pub fn prove(
     let circuit = ZKIFCircuit { messages };
 
     // Load params.
-    let mut fs = File::open(&key_path)?;
-    let params = Parameters::<Bls12>::read(&mut fs, false)?;
+    let params = {
+        let mut file = File::open(&key_path)?;
+        Parameters::<Bls12>::read(&mut file, false)?
+    };
 
     let mut rng = OsRng::new()?;
     let proof = create_random_proof(
@@ -159,34 +164,64 @@ pub fn prove(
     )?;
 
     // Store proof.
-    let f = File::create(proof_path)?;
-    proof.write(f)?;
+    let file = File::create(proof_path)?;
+    proof.write(file)?;
 
     Ok(())
 }
+
+pub fn verify(
+    messages: &Messages,
+    workspace: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let key_path = workspace.join("bellman-pk");
+    let proof_path = workspace.join("bellman-proof");
+
+    let pvk = {
+        let mut file = File::open(&key_path)?;
+        let params = Parameters::<Bls12>::read(&mut file, false)?;
+        prepare_verifying_key::<Bls12>(&params.vk)
+    };
+
+    let public_inputs: Vec<<Bls12 as ScalarEngine>::Fr> = {
+        match messages.connection_variables() {
+            None => Vec::new(),
+            Some(connections) => {
+                connections.iter().map(|var|
+                    le_to_fr::<Bls12>(var.value)
+                ).collect()
+            }
+        }
+    };
+
+    let proof = {
+        let mut file = File::open(&proof_path)?;
+        Proof::read(&mut file).unwrap()
+    };
+    let ok = verify_proof(&pvk, &proof, &public_inputs)?;
+
+    if ok {
+        eprintln!("The proof is valid.");
+        Ok(())
+    } else {
+        Err("The proof is NOT valid.".into())
+    }
+}
+
 
 #[test]
 fn test_zkif_backend() {
 
     // Load test messages.
-    let test_dir = Path::new("src/demo_import_from_zokrates/messages");
+    let test_dir = Path::new("src/tests/example.zkif");
     let out_dir = Path::new("local");
 
-    // Setup.
-    {
-        let mut messages = Messages::new();
-        messages.read_file(test_dir.join("r1cs.zkif")).unwrap();
-        messages.read_file(test_dir.join("circuit_r1cs.zkif")).unwrap();
+    let mut messages = Messages::new();
+    messages.read_file(test_dir).unwrap();
 
-        setup(&messages, out_dir).unwrap();
-    }
+    setup(&messages, out_dir).unwrap();
 
-    // Prove.
-    {
-        let mut messages = Messages::new();
-        messages.read_file(test_dir.join("witness.zkif")).unwrap();
-        messages.read_file(test_dir.join("circuit_witness.zkif")).unwrap();
+    prove(&messages, out_dir).unwrap();
 
-        prove(&messages, out_dir).unwrap();
-    }
+    verify(&messages, out_dir).unwrap();
 }
