@@ -10,6 +10,7 @@ use bellman::{
     Variable,
 };
 use pairing::{bls12_381::Bls12, Engine};
+use ff::{Field, PrimeField, PrimeFieldRepr};
 use rand::OsRng;
 use sapling_crypto::circuit::num::AllocatedNum;
 use std::collections::HashMap;
@@ -30,6 +31,25 @@ pub struct ZKIFCircuit<'a> {
 impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
     {
+        // Check that we are working on the right field.
+        match self.messages.first_circuit().unwrap().field_maximum() {
+            None => {
+                eprintln!("Warning: no field_maximum specified in messages, the field may be incompatible.");
+            }
+            Some(field_maximum) => {
+                let mut fr = E::Fr::one();
+                fr.negate();
+                let mut fmax = Vec::<u8>::new();
+                fr.into_repr().write_le(&mut fmax).unwrap();
+                if fmax != field_maximum {
+                    eprintln!("Error: This proving system does not support the field specified for this circuit.");
+                    eprintln!("Requested field: {:?}", field_maximum);
+                    eprintln!("Supported field: {:?}", fmax);
+                    panic!();
+                }
+            }
+        }
+
         // Track variables by id. Used to convert constraints.
         let mut id_to_var = HashMap::<u64, Variable>::new();
 
