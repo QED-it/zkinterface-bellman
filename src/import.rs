@@ -3,36 +3,36 @@ use bellman::{
     LinearCombination,
     SynthesisError,
     Variable,
+    gadgets::num::AllocatedNum,
 };
-use ff::{Field, PrimeField, PrimeFieldRepr};
-use pairing::Engine;
-use sapling_crypto::circuit::num::AllocatedNum;
+use bls12_381::Scalar;
 use std::collections::HashMap;
 use zkinterface::{
     Messages, CircuitOwned, VariablesOwned, Result,
     reading::{Constraint, Term},
 };
+use crate::export::encode_scalar;
 
 
 /// Convert zkInterface little-endian bytes to bellman Fr.
-pub fn le_to_fr<E: Engine>(bytes_le: &[u8]) -> E::Fr {
+pub fn decode_scalar(bytes_le: &[u8]) -> Scalar {
     if bytes_le.len() == 0 {
-        return E::Fr::zero();
+        return Scalar::zero();
     }
+    assert!(bytes_le.len() <= 32, "Element is too big ({} > 32 bytes)", bytes_le.len());
 
-    let mut repr = <E::Fr as PrimeField>::Repr::default();
-    let mut bytes_le = Vec::from(bytes_le);
-    let words = (E::Fr::NUM_BITS + 63) / 64;
-    bytes_le.resize(8 * words as usize, 0);
-    repr.read_le(&bytes_le as &[u8]).unwrap();
-    E::Fr::from_repr(repr).unwrap()
+    let mut repr = [0 as u8; 32];
+    for i in 0..bytes_le.len() {
+        repr[i] = bytes_le[i];
+    }
+    Scalar::from_bytes(&repr).unwrap()
 }
 
 /// Convert zkInterface terms to bellman LinearCombination.
-pub fn terms_to_lc<E: Engine>(vars: &HashMap<u64, Variable>, terms: &[Term]) -> LinearCombination<E> {
+pub fn terms_to_lc(vars: &HashMap<u64, Variable>, terms: &[Term]) -> LinearCombination<Scalar> {
     let mut lc = LinearCombination::zero();
     for term in terms {
-        let coeff = le_to_fr::<E>(term.value);
+        let coeff = decode_scalar(term.value);
         let var = vars.get(&term.id).unwrap().clone();
         lc = lc + (coeff, var);
     }
@@ -40,9 +40,8 @@ pub fn terms_to_lc<E: Engine>(vars: &HashMap<u64, Variable>, terms: &[Term]) -> 
 }
 
 /// Enforce a zkInterface constraint in bellman CS.
-pub fn enforce<E, CS>(cs: &mut CS, vars: &HashMap<u64, Variable>, constraint: &Constraint)
-    where E: Engine,
-          CS: ConstraintSystem<E>
+pub fn enforce<CS>(cs: &mut CS, vars: &HashMap<u64, Variable>, constraint: &Constraint)
+    where CS: ConstraintSystem<Scalar>
 {
     cs.enforce(|| "",
                |_| terms_to_lc(vars, &constraint.a),
@@ -52,13 +51,12 @@ pub fn enforce<E, CS>(cs: &mut CS, vars: &HashMap<u64, Variable>, constraint: &C
 }
 
 /// Call a foreign gadget through zkInterface.
-pub fn call_gadget<E, CS>(
+pub fn call_gadget<CS>(
     cs: &mut CS,
-    inputs: &[AllocatedNum<E>],
+    inputs: &[AllocatedNum<Scalar>],
     exec_fn: &dyn Fn(&[u8]) -> Result<Messages>,
-) -> Result<Vec<AllocatedNum<E>>>
-    where E: Engine,
-          CS: ConstraintSystem<E>
+) -> Result<Vec<AllocatedNum<Scalar>>>
+    where CS: ConstraintSystem<Scalar>
 {
     let witness_generation = inputs.len() > 0 && inputs[0].get_value().is_some();
 
@@ -66,7 +64,8 @@ pub fn call_gadget<E, CS>(
     let values = if witness_generation {
         let mut values = Vec::<u8>::new();
         for i in inputs {
-            i.get_value().unwrap().into_repr().write_le(&mut values)?;
+            let val = i.get_value().unwrap();
+            encode_scalar(&val, &mut values);
         }
         Some(values)
     } else {
@@ -111,7 +110,7 @@ pub fn call_gadget<E, CS>(
         for var in output_vars {
             let num = AllocatedNum::alloc(
                 cs.namespace(|| format!("output_{}", var.id)), || {
-                    Ok(le_to_fr::<E>(var.value))
+                    Ok(decode_scalar(var.value))
                 })?;
 
             // Track output variable.
@@ -126,7 +125,7 @@ pub fn call_gadget<E, CS>(
     for var in private_vars {
         let num = AllocatedNum::alloc(
             cs.namespace(|| format!("local_{}", var.id)), || {
-                Ok(le_to_fr::<E>(var.value))
+                Ok(decode_scalar(var.value))
             })?;
 
         // Track private variable.

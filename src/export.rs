@@ -2,11 +2,11 @@ use std::io::Write;
 use zkinterface::owned::variables::VariablesOwned;
 use zkinterface::owned::constraints::BilinearConstraintOwned;
 use bellman::{LinearCombination, Index};
-use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
+use bls12_381::Scalar;
 
 
-pub fn to_zkif_constraint<E: ScalarEngine>(
-    a: LinearCombination<E>, b: LinearCombination<E>, c: LinearCombination<E>,
+pub fn to_zkif_constraint(
+    a: LinearCombination<Scalar>, b: LinearCombination<Scalar>, c: LinearCombination<Scalar>,
 ) -> BilinearConstraintOwned
 {
     BilinearConstraintOwned {
@@ -16,7 +16,7 @@ pub fn to_zkif_constraint<E: ScalarEngine>(
     }
 }
 
-pub fn to_zkif_lc<E: ScalarEngine>(lc: LinearCombination<E>) -> VariablesOwned {
+pub fn to_zkif_lc(lc: LinearCombination<Scalar>) -> VariablesOwned {
     let mut variable_ids = Vec::<u64>::new();
     let mut coeffs = Vec::<u8>::new();
 
@@ -27,14 +27,14 @@ pub fn to_zkif_lc<E: ScalarEngine>(lc: LinearCombination<E>) -> VariablesOwned {
         };
         variable_ids.push(zkid as u64);
 
-        fr_to_le(coeff, &mut coeffs);
+        encode_scalar(coeff, &mut coeffs);
     }
 
     VariablesOwned { variable_ids, values: Some(coeffs) }
 }
 
 /// Convert bellman Fr to zkInterface little-endian bytes.
-pub fn fr_to_le(fr: &impl PrimeField, writer: &mut impl Write) {
-    let repr = fr.into_repr();
-    repr.write_le(writer).unwrap();
+pub fn encode_scalar(fr: &Scalar, writer: &mut impl Write) {
+    let repr = fr.to_bytes();
+    writer.write_all(&repr).unwrap();
 }

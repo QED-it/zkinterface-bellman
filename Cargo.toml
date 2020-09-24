@@ -1,6 +1,6 @@
 [package]
 name = "zkinterface_bellman"
-version = "1.1.4"
+version = "1.2.0"
 authors = ["Aurélien Nicolas <aurel@qed-it.com>"]
 license = "MIT"
 edition = "2018"
@@ -21,13 +21,12 @@ path = "src/bin.rs"
 zokrates = ["num-bigint"]
 
 [dependencies]
-ff = { version = "0.4.0", git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
-pairing = { version = "0.14.2", git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
-bellman = { version = "0.1.0", git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
-sapling-crypto = { version = "0.0.1", git = "https://github.com/zcash/librustzcash", rev="d7ba3102948b1b144e24462dc36c37091dda6355" }
-
 zkinterface = { version = "1.1.4" }
-#zkinterface = { version = "1.1.4", path = "../zkinterface/rust" }
 
-rand = "0.4"
+bellman = "0.8.0"
+ff = "0.8.0"
+pairing = "0.18.0"
+bls12_381 = "0.3.1"
+
+rand = "0.7"
 num-bigint = { version = "0.2.2", optional = true}

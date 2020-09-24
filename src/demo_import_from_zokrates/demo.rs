@@ -3,7 +3,7 @@ use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use sapling_crypto::circuit::num::AllocatedNum;
 use std::env;
 use crate::import::call_gadget;
-use crate::test_cs::TestConstraintSystem;
+use bellman::gadgets::test::TestConstraintSystem;
 use super::exec_zokrates::exec_zokrates;
 
 #[test]

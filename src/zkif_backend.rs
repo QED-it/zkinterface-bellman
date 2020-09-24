@@ -11,19 +11,17 @@ use bellman::{
     },
     SynthesisError,
     Variable,
+    gadgets::num::AllocatedNum,
 };
-use pairing::{bls12_381::Bls12, Engine};
-use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
-use rand::OsRng;
-use sapling_crypto::circuit::num::AllocatedNum;
+use bls12_381::{Bls12, Scalar};
+use rand;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
-use super::import::{enforce, le_to_fr};
+use super::import::{enforce, decode_scalar};
 pub use zkinterface::reading::Messages;
 use std::error::Error;
-use crate::test_cs::TestConstraintSystem;
-
+use bellman::gadgets::test::TestConstraintSystem;
 
 /// A circuit instance built from zkif messages.
 #[derive(Clone, Debug)]
@@ -31,8 +29,8 @@ pub struct ZKIFCircuit<'a> {
     pub messages: &'a Messages,
 }
 
-impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
+impl<'a> Circuit<Scalar> for ZKIFCircuit<'a> {
+    fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError>
     {
         // Check that we are working on the right field.
         match self.messages.first_circuit().unwrap().field_maximum() {
@@ -40,14 +38,12 @@ impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
                 eprintln!("Warning: no field_maximum specified in messages, the field may be incompatible.");
             }
             Some(field_maximum) => {
-                let mut fr = E::Fr::one();
-                fr.negate();
-                let mut fmax = Vec::<u8>::new();
-                fr.into_repr().write_le(&mut fmax).unwrap();
-                if fmax != field_maximum {
+                let requested = decode_scalar(field_maximum);
+                let supported = Scalar::one().neg();
+                if requested != supported {
                     eprintln!("Error: This proving system does not support the field specified for this circuit.");
-                    eprintln!("Requested field: {:?}", field_maximum);
-                    eprintln!("Supported field: {:?}", fmax);
+                    eprintln!("Requested field: {:?}", requested);
+                    eprintln!("Supported field: {:?}", supported);
                     panic!();
                 }
             }
@@ -64,7 +60,7 @@ impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
         for var in public_vars {
             let mut cs = cs.namespace(|| format!("public_{}", var.id));
             let num = AllocatedNum::alloc(&mut cs, || {
-                Ok(le_to_fr::<E>(var.value))
+                Ok(decode_scalar(var.value))
             })?;
 
             num.inputize(&mut cs)?;
@@ -79,7 +75,7 @@ impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
         for var in private_vars {
             let num = AllocatedNum::alloc(
                 cs.namespace(|| format!("private_{}", var.id)), || {
-                    Ok(le_to_fr::<E>(var.value))
+                    Ok(decode_scalar(var.value))
                 })?;
 
             // Track private variable.
@@ -97,7 +93,7 @@ impl<'a, E: Engine> Circuit<E> for ZKIFCircuit<'a> {
 
 pub fn validate(messages: &Messages, print: bool) -> Result<(), Box<dyn Error>> {
     let circuit = ZKIFCircuit { messages };
-    let mut cs = TestConstraintSystem::<Bls12>::new();
+    let mut cs = TestConstraintSystem::<Scalar>::new();
     circuit.synthesize(&mut cs)?;
 
     if print {
@@ -127,7 +123,7 @@ pub fn setup(
 
     let circuit = ZKIFCircuit { messages };
 
-    let mut rng = OsRng::new()?;
+    let mut rng = rand::thread_rng();
     let params = generate_random_parameters::<Bls12, _, _>(
         circuit.clone(),
         &mut rng,
@@ -156,7 +152,7 @@ pub fn prove(
         Parameters::<Bls12>::read(&mut file, false)?
     };
 
-    let mut rng = OsRng::new()?;
+    let mut rng = rand::thread_rng();
     let proof = create_random_proof(
         circuit,
         &params,
@@ -183,12 +179,12 @@ pub fn verify(
         prepare_verifying_key::<Bls12>(&params.vk)
     };
 
-    let public_inputs: Vec<<Bls12 as ScalarEngine>::Fr> = {
+    let public_inputs: Vec<Scalar> = {
         match messages.connection_variables() {
             None => Vec::new(),
             Some(connections) => {
                 connections.iter().map(|var|
-                    le_to_fr::<Bls12>(var.value)
+                    decode_scalar(var.value)
                 ).collect()
             }
         }
@@ -198,14 +194,14 @@ pub fn verify(
         let mut file = File::open(&proof_path)?;
         Proof::read(&mut file).unwrap()
     };
-    let ok = verify_proof(&pvk, &proof, &public_inputs)?;
+    let res = verify_proof(&pvk, &proof, &public_inputs);
 
-    if ok {
-        eprintln!("The proof is valid.");
-        Ok(())
-    } else {
-        Err("The proof is NOT valid.".into())
-    }
+    match res {
+        Ok(()) => eprintln!("The proof is valid."),
+        Err(_) => eprintln!("The proof is NOT valid."),
+    };
+    res?;
+    Ok(())
 }
 
 
