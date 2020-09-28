@@ -12,8 +12,8 @@ use bellman::{
     SynthesisError,
     Variable,
     gadgets::num::AllocatedNum,
+    gadgets::test::TestConstraintSystem,
 };
-use bls12_381::{Bls12, Scalar};
 use rand;
 use std::collections::HashMap;
 use std::fs::File;
@@ -21,7 +21,9 @@ use std::path::Path;
 use super::import::{enforce, decode_scalar};
 pub use zkinterface::reading::Messages;
 use std::error::Error;
-use bellman::gadgets::test::TestConstraintSystem;
+use ff::PrimeField;
+use bls12_381::{Bls12, Scalar as Bls12Scalar};
+
 
 /// A circuit instance built from zkif messages.
 #[derive(Clone, Debug)]
@@ -29,7 +31,7 @@ pub struct ZKIFCircuit<'a> {
     pub messages: &'a Messages,
 }
 
-impl<'a> Circuit<Scalar> for ZKIFCircuit<'a> {
+impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
     fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError>
     {
         // Check that we are working on the right field.
@@ -38,8 +40,8 @@ impl<'a> Circuit<Scalar> for ZKIFCircuit<'a> {
                 eprintln!("Warning: no field_maximum specified in messages, the field may be incompatible.");
             }
             Some(field_maximum) => {
-                let requested = decode_scalar(field_maximum);
-                let supported = Scalar::one().neg();
+                let requested: Scalar = decode_scalar(field_maximum);
+                let supported: Scalar = Scalar::one().neg();
                 if requested != supported {
                     eprintln!("Error: This proving system does not support the field specified for this circuit.");
                     eprintln!("Requested field: {:?}", requested);
@@ -91,7 +93,10 @@ impl<'a> Circuit<Scalar> for ZKIFCircuit<'a> {
 }
 
 
-pub fn validate(messages: &Messages, print: bool) -> Result<(), Box<dyn Error>> {
+pub fn validate<Scalar: PrimeField>(
+    messages: &Messages,
+    print: bool,
+) -> Result<(), Box<dyn Error>> {
     let circuit = ZKIFCircuit { messages };
     let mut cs = TestConstraintSystem::<Scalar>::new();
     circuit.synthesize(&mut cs)?;
@@ -179,7 +184,7 @@ pub fn verify(
         prepare_verifying_key::<Bls12>(&params.vk)
     };
 
-    let public_inputs: Vec<Scalar> = {
+    let public_inputs: Vec<Bls12Scalar> = {
         match messages.connection_variables() {
             None => Vec::new(),
             Some(connections) => {
@@ -206,18 +211,22 @@ pub fn verify(
 
 
 #[test]
-fn test_zkif_backend() {
+fn test_zkif_backend() -> Result<(), Box<dyn Error>> {
 
     // Load test messages.
     let test_dir = Path::new("src/tests/example.zkif");
     let out_dir = Path::new("local");
 
     let mut messages = Messages::new();
-    messages.read_file(test_dir).unwrap();
+    messages.read_file(test_dir)?;
 
-    setup(&messages, out_dir).unwrap();
+    validate::<bls12_381::Scalar>(&messages, false)?;
 
-    prove(&messages, out_dir).unwrap();
+    setup(&messages, out_dir)?;
 
-    verify(&messages, out_dir).unwrap();
+    prove(&messages, out_dir)?;
+
+    verify(&messages, out_dir)?;
+
+    Ok(())
 }

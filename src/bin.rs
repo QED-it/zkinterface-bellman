@@ -3,6 +3,7 @@ use zkinterface_bellman::zkif_backend::{setup, prove, verify, validate};
 use std::io;
 use std::io::Read;
 use std::env;
+use bls12_381::Scalar as Bls12Scalar;
 
 
 const USAGE: &str = "Bellman prover.
@@ -45,8 +46,8 @@ pub fn main() -> Result<()> {
     let workspace = env::current_dir()?;
 
     match &command[..] {
-        "validate" => validate(&messages, false),
-        "print" => validate(&messages, true),
+        "validate" => validate::<Bls12Scalar>(&messages, false),
+        "print" => validate::<Bls12Scalar>(&messages, true),
         "setup" => setup(&messages, &workspace),
         "prove" => prove(&messages, &workspace),
         "verify" => verify(&messages, &workspace),

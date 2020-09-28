@@ -5,31 +5,38 @@ use bellman::{
     Variable,
     gadgets::num::AllocatedNum,
 };
-use bls12_381::Scalar;
 use std::collections::HashMap;
 use zkinterface::{
     Messages, CircuitOwned, VariablesOwned, Result,
     reading::{Constraint, Term},
 };
 use crate::export::encode_scalar;
+use ff::PrimeField;
 
 
 /// Convert zkInterface little-endian bytes to bellman Fr.
-pub fn decode_scalar(bytes_le: &[u8]) -> Scalar {
-    if bytes_le.len() == 0 {
-        return Scalar::zero();
-    }
-    assert!(bytes_le.len() <= 32, "Element is too big ({} > 32 bytes)", bytes_le.len());
+/// TODO: Verify that Scalar::Repr is little-endian.
+pub fn decode_scalar<Scalar: PrimeField>(
+    encoded: &[u8],
+) -> Scalar {
+    let mut repr = Scalar::Repr::default();
 
-    let mut repr = [0 as u8; 32];
-    for i in 0..bytes_le.len() {
-        repr[i] = bytes_le[i];
+    {
+        let repr: &mut [u8] = repr.as_mut();
+        assert!(encoded.len() <= repr.len(), "Element is too big ({} > {} bytes)", encoded.len(), repr.len());
+        for i in 0..encoded.len() {
+            repr[i] = encoded[i];
+        }
     }
-    Scalar::from_bytes(&repr).unwrap()
+
+    Scalar::from_repr(repr).unwrap()
 }
 
 /// Convert zkInterface terms to bellman LinearCombination.
-pub fn terms_to_lc(vars: &HashMap<u64, Variable>, terms: &[Term]) -> LinearCombination<Scalar> {
+pub fn terms_to_lc<Scalar: PrimeField>(
+    vars: &HashMap<u64, Variable>,
+    terms: &[Term],
+) -> LinearCombination<Scalar> {
     let mut lc = LinearCombination::zero();
     for term in terms {
         let coeff = decode_scalar(term.value);
@@ -40,9 +47,11 @@ pub fn terms_to_lc(vars: &HashMap<u64, Variable>, terms: &[Term]) -> LinearCombi
 }
 
 /// Enforce a zkInterface constraint in bellman CS.
-pub fn enforce<CS>(cs: &mut CS, vars: &HashMap<u64, Variable>, constraint: &Constraint)
-    where CS: ConstraintSystem<Scalar>
-{
+pub fn enforce<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
+    cs: &mut CS,
+    vars: &HashMap<u64, Variable>,
+    constraint: &Constraint,
+) {
     cs.enforce(|| "",
                |_| terms_to_lc(vars, &constraint.a),
                |_| terms_to_lc(vars, &constraint.b),
@@ -51,13 +60,11 @@ pub fn enforce<CS>(cs: &mut CS, vars: &HashMap<u64, Variable>, constraint: &Cons
 }
 
 /// Call a foreign gadget through zkInterface.
-pub fn call_gadget<CS>(
+pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     cs: &mut CS,
     inputs: &[AllocatedNum<Scalar>],
     exec_fn: &dyn Fn(&[u8]) -> Result<Messages>,
-) -> Result<Vec<AllocatedNum<Scalar>>>
-    where CS: ConstraintSystem<Scalar>
-{
+) -> Result<Vec<AllocatedNum<Scalar>>> {
     let witness_generation = inputs.len() > 0 && inputs[0].get_value().is_some();
 
     // Serialize input values.
