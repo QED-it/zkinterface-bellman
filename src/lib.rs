@@ -1,6 +1,7 @@
 pub mod import;
 pub mod export;
 pub mod zkif_backend;
+pub mod zkif_cs;
 
 // Reexport dependencies for convenience.
 pub use bellman;
