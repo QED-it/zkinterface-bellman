@@ -4,6 +4,7 @@ pub mod zkif_backend;
 pub mod zkif_cs;
 
 // Reexport dependencies for convenience.
+pub use zkinterface;
 pub use bellman;
 pub use ff;
 pub use pairing;

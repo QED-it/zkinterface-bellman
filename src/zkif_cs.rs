@@ -2,17 +2,18 @@ use std::path::Path;
 use std::marker::PhantomData;
 
 use zkinterface::{
-    ConstraintSystemOwned, WitnessOwned, VariablesOwned, CircuitOwned, KeyValueOwned,
-    statement::{StatementBuilder, FileStore, GadgetCallbacks, Store},
+    ConstraintSystem, Witness, Variables, CircuitHeader, KeyValue,
+    producers::statement::{StatementBuilder, FileStore, GadgetCallbacks, Store},
 };
-use bellman::{ConstraintSystem, Variable, Index, LinearCombination, SynthesisError};
+use bellman as bl;
+use bellman::{Variable, Index, LinearCombination, SynthesisError};
 use ff::PrimeField;
 use super::export::{encode_scalar, to_zkif_constraint};
 
 
 pub struct ZkifCS<Scalar: PrimeField> {
     stmt: StatementBuilder<FileStore>,
-    constraints: ConstraintSystemOwned,
+    constraints: ConstraintSystem,
     proving: bool,
     witness: Vec<u8>,
     phantom: PhantomData<Scalar>,
@@ -26,7 +27,7 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
 
         ZkifCS {
             stmt,
-            constraints: ConstraintSystemOwned { constraints: vec![] },
+            constraints: ConstraintSystem::default(),
             proving,
             witness: vec![],
             phantom: PhantomData,
@@ -40,8 +41,8 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
 
         if self.proving {
             let variable_ids = (1..self.stmt.vars.free_variable_id).collect();
-            let wit = WitnessOwned {
-                assigned_variables: VariablesOwned {
+            let wit = Witness {
+                assigned_variables: Variables {
                     variable_ids,
                     values: Some(self.witness.clone()),
                 }
@@ -55,15 +56,15 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
         let mut field_maximum = Vec::<u8>::new();
         encode_scalar(&negative_one, &mut field_maximum);
 
-        let statement = CircuitOwned {
-            connections: VariablesOwned {
+        let statement = CircuitHeader {
+            instance_variables: Variables {
                 variable_ids: vec![],
                 values: Some(vec![]),
             },
             free_variable_id: self.stmt.vars.free_variable_id,
             field_maximum: Some(field_maximum),
             configuration: Some(vec![
-                KeyValueOwned {
+                KeyValue {
                     key: "name".to_string(),
                     text: Some(name.to_string()),
                     data: None,
@@ -74,7 +75,7 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
     }
 }
 
-impl<Scalar: PrimeField> ConstraintSystem<Scalar> for ZkifCS<Scalar> {
+impl<Scalar: PrimeField> bl::ConstraintSystem<Scalar> for ZkifCS<Scalar> {
     type Root = Self;
 
     fn alloc<F, A, AR>(&mut self, _annotation: A, f: F) -> Result<Variable, SynthesisError>
@@ -93,7 +94,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for ZkifCS<Scalar> {
         where F: FnOnce() -> Result<Scalar, SynthesisError>,
               A: FnOnce() -> AR, AR: Into<String>
     {
-        ConstraintSystem::<Scalar>::alloc(self, annotation, f)
+        bl::ConstraintSystem::<Scalar>::alloc(self, annotation, f)
     }
 
     fn enforce<A, AR, LA, LB, LC>(&mut self, _annotation: A, a: LA, b: LB, c: LC)

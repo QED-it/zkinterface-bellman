@@ -15,15 +15,15 @@ use std::path::Path;
 use std::process::{Command, Output};
 use zkinterface::{
     Result,
-    reading::{
-        Messages,
+    consumers::reader::{
+        Reader,
         parse_call,
         is_contiguous,
     },
 };
 
 
-pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages> {
+pub fn exec_zokrates(call_msg: &[u8]) -> Result<Reader> {
     let (call, inputs) = parse_call(call_msg).unwrap();
 
     // Non-contiguous IDs are not supported by ZoKrates yet.
@@ -38,7 +38,7 @@ pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages> {
     let zokrates_home = Path::new(&zokrates_home);
     let make_zokrates_command = || { Command::new("src/demo_import_from_zokrates/exec_zokrates") };
 
-    let mut messages = Messages::new_filtered(call.free_variable_id());
+    let mut reader = Reader::new_filtered(call.free_variable_id());
 
     {
         // Write Call message -> call.zkif
@@ -62,8 +62,8 @@ pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages> {
             cmd.args(&["setup", "--backend", "zkinterface", "-p", "r1cs.zkif"]);
             let _out = exec(&mut cmd);
 
-            messages.read_file(zokrates_home.join("r1cs.zkif"))?;
-            messages.read_file(zokrates_home.join("circuit_r1cs.zkif"))?;
+            reader.read_file(zokrates_home.join("r1cs.zkif"))?;
+            reader.read_file(zokrates_home.join("circuit_r1cs.zkif"))?;
         }
 
         let witness_generation = inputs.len() > 0 && inputs[0].value.len() > 0;
@@ -87,13 +87,13 @@ pub fn exec_zokrates(call_msg: &[u8]) -> Result<Messages> {
                 cmd.args(&["generate-proof", "--backend", "zkinterface", "-j", "witness.zkif"]);
                 let _out = exec(&mut cmd);
 
-                messages.read_file(zokrates_home.join("witness.zkif"))?;
-                messages.read_file(zokrates_home.join("circuit_witness.zkif"))?;
+                reader.read_file(zokrates_home.join("witness.zkif"))?;
+                reader.read_file(zokrates_home.join("circuit_witness.zkif"))?;
             }
         }
     }
 
-    Ok(messages)
+    Ok(reader)
 }
 
 /// Convert zkInterface little-endian bytes to zokrates decimal.

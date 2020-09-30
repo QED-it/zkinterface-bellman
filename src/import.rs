@@ -7,8 +7,8 @@ use bellman::{
 };
 use std::collections::HashMap;
 use zkinterface::{
-    Messages, CircuitOwned, VariablesOwned, Result,
-    reading::{Constraint, Term},
+    CircuitHeader, Variables, Result,
+    consumers::reader::{Reader, Constraint, Term},
 };
 use crate::export::encode_scalar;
 use ff::PrimeField;
@@ -63,7 +63,7 @@ pub fn enforce<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
 pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     cs: &mut CS,
     inputs: &[AllocatedNum<Scalar>],
-    exec_fn: &dyn Fn(&[u8]) -> Result<Messages>,
+    exec_fn: &dyn Fn(&[u8]) -> Result<Reader>,
 ) -> Result<Vec<AllocatedNum<Scalar>>> {
     let witness_generation = inputs.len() > 0 && inputs[0].get_value().is_some();
 
@@ -79,12 +79,12 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
         None
     };
 
-    // Describe the input connections.
+    // Describe the input variables.
     let first_input_id = 1;
     let free_variable_id = first_input_id + inputs.len() as u64;
 
-    let call = CircuitOwned {
-        connections: VariablesOwned {
+    let call_header = CircuitHeader {
+        instance_variables: Variables {
             variable_ids: (first_input_id..free_variable_id).collect(),
             values,
         },
@@ -95,10 +95,10 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
 
     // Prepare the call.
     let mut call_buf = vec![];
-    call.write_into(&mut call_buf)?;
+    call_header.write_into(&mut call_buf)?;
 
     // Call.
-    let messages = exec_fn(&call_buf).or(Err(SynthesisError::Unsatisfiable))?;
+    let response = exec_fn(&call_buf).or(Err(SynthesisError::Unsatisfiable))?;
 
     // Track variables by id. Used to convert constraints.
     let mut id_to_var = HashMap::<u64, Variable>::new();
@@ -106,14 +106,14 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     id_to_var.insert(0, CS::one());
 
     for i in 0..inputs.len() {
-        id_to_var.insert(call.connections.variable_ids[i], inputs[i].get_variable());
+        id_to_var.insert(call_header.instance_variables.variable_ids[i], inputs[i].get_variable());
     }
 
     // Collect output variables and values to return.
     let mut outputs = Vec::new();
 
     // Allocate outputs, with optional values.
-    if let Some(output_vars) = messages.connection_variables() {
+    if let Some(output_vars) = response.instance_variables() {
         for var in output_vars {
             let num = AllocatedNum::alloc(
                 cs.namespace(|| format!("output_{}", var.id)), || {
@@ -127,7 +127,7 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     }
 
     // Allocate private variables, with optional values.
-    let private_vars = messages.private_variables().unwrap();
+    let private_vars = response.private_variables().unwrap();
 
     for var in private_vars {
         let num = AllocatedNum::alloc(
@@ -140,7 +140,7 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     };
 
     // Add gadget constraints.
-    for (i, constraint) in messages.iter_constraints().enumerate() {
+    for (i, constraint) in response.iter_constraints().enumerate() {
         enforce(&mut cs.namespace(|| format!("constraint_{}", i)), &id_to_var, &constraint);
     }
 

@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 use super::import::{enforce, decode_scalar};
-pub use zkinterface::reading::Messages;
+pub use zkinterface::Reader;
 use std::error::Error;
 use ff::PrimeField;
 use bls12_381::{Bls12, Scalar as Bls12Scalar};
@@ -28,14 +28,14 @@ use bls12_381::{Bls12, Scalar as Bls12Scalar};
 /// A circuit instance built from zkif messages.
 #[derive(Clone, Debug)]
 pub struct ZKIFCircuit<'a> {
-    pub messages: &'a Messages,
+    pub reader: &'a Reader,
 }
 
 impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
     fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError>
     {
         // Check that we are working on the right field.
-        match self.messages.first_circuit().unwrap().field_maximum() {
+        match self.reader.first_header().unwrap().field_maximum() {
             None => {
                 eprintln!("Warning: no field_maximum specified in messages, the field may be incompatible.");
             }
@@ -57,7 +57,7 @@ impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
         id_to_var.insert(0, CS::one());
 
         // Allocate public inputs, with optional values.
-        let public_vars = self.messages.connection_variables().unwrap();
+        let public_vars = self.reader.instance_variables().unwrap();
 
         for var in public_vars {
             let mut cs = cs.namespace(|| format!("public_{}", var.id));
@@ -72,7 +72,7 @@ impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
         }
 
         // Allocate private variables, with optional values.
-        let private_vars = self.messages.private_variables().unwrap();
+        let private_vars = self.reader.private_variables().unwrap();
 
         for var in private_vars {
             let num = AllocatedNum::alloc(
@@ -84,7 +84,7 @@ impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
             id_to_var.insert(var.id, num.get_variable());
         };
 
-        for (i, constraint) in self.messages.iter_constraints().enumerate() {
+        for (i, constraint) in self.reader.iter_constraints().enumerate() {
             enforce(&mut cs.namespace(|| format!("constraint_{}", i)), &id_to_var, &constraint);
         }
 
@@ -94,10 +94,10 @@ impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
 
 
 pub fn validate<Scalar: PrimeField>(
-    messages: &Messages,
+    reader: &Reader,
     print: bool,
 ) -> Result<(), Box<dyn Error>> {
-    let circuit = ZKIFCircuit { messages };
+    let circuit = ZKIFCircuit { reader };
     let mut cs = TestConstraintSystem::<Scalar>::new();
     circuit.synthesize(&mut cs)?;
 
@@ -120,13 +120,13 @@ pub fn validate<Scalar: PrimeField>(
 
 
 pub fn setup(
-    messages: &Messages,
+    reader: &Reader,
     workspace: &Path,
 ) -> Result<(), Box<dyn Error>>
 {
     let key_path = workspace.join("bellman-pk");
 
-    let circuit = ZKIFCircuit { messages };
+    let circuit = ZKIFCircuit { reader };
 
     let mut rng = rand::thread_rng();
     let params = generate_random_parameters::<Bls12, _, _>(
@@ -142,14 +142,14 @@ pub fn setup(
 }
 
 pub fn prove(
-    messages: &Messages,
+    reader: &Reader,
     workspace: &Path,
 ) -> Result<(), Box<dyn Error>>
 {
     let key_path = workspace.join("bellman-pk");
     let proof_path = workspace.join("bellman-proof");
 
-    let circuit = ZKIFCircuit { messages };
+    let circuit = ZKIFCircuit { reader };
 
     // Load params.
     let params = {
@@ -172,7 +172,7 @@ pub fn prove(
 }
 
 pub fn verify(
-    messages: &Messages,
+    reader: &Reader,
     workspace: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let key_path = workspace.join("bellman-pk");
@@ -185,10 +185,10 @@ pub fn verify(
     };
 
     let public_inputs: Vec<Bls12Scalar> = {
-        match messages.connection_variables() {
+        match reader.instance_variables() {
             None => Vec::new(),
-            Some(connections) => {
-                connections.iter().map(|var|
+            Some(instance_variables) => {
+                instance_variables.iter().map(|var|
                     decode_scalar(var.value)
                 ).collect()
             }
@@ -217,16 +217,16 @@ fn test_zkif_backend() -> Result<(), Box<dyn Error>> {
     let test_dir = Path::new("src/tests/example.zkif");
     let out_dir = Path::new("local");
 
-    let mut messages = Messages::new();
-    messages.read_file(test_dir)?;
+    let mut reader = Reader::new();
+    reader.read_file(test_dir)?;
 
-    validate::<bls12_381::Scalar>(&messages, false)?;
+    validate::<bls12_381::Scalar>(&reader, false)?;
 
-    setup(&messages, out_dir)?;
+    setup(&reader, out_dir)?;
 
-    prove(&messages, out_dir)?;
+    prove(&reader, out_dir)?;
 
-    verify(&messages, out_dir)?;
+    verify(&reader, out_dir)?;
 
     Ok(())
 }

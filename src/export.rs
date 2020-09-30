@@ -1,6 +1,5 @@
 use std::io::Write;
-use zkinterface::owned::variables::VariablesOwned;
-use zkinterface::owned::constraints::BilinearConstraintOwned;
+use zkinterface::{Variables, BilinearConstraint};
 use bellman::{LinearCombination, Index};
 use ff::PrimeField;
 
@@ -9,8 +8,8 @@ pub fn to_zkif_constraint<Scalar: PrimeField>(
     a: LinearCombination<Scalar>,
     b: LinearCombination<Scalar>,
     c: LinearCombination<Scalar>,
-) -> BilinearConstraintOwned {
-    BilinearConstraintOwned {
+) -> BilinearConstraint {
+    BilinearConstraint {
         linear_combination_a: to_zkif_lc(a),
         linear_combination_b: to_zkif_lc(b),
         linear_combination_c: to_zkif_lc(c),
@@ -19,7 +18,7 @@ pub fn to_zkif_constraint<Scalar: PrimeField>(
 
 pub fn to_zkif_lc<Scalar: PrimeField>(
     lc: LinearCombination<Scalar>,
-) -> VariablesOwned {
+) -> Variables {
     let mut variable_ids = Vec::<u64>::new();
     let mut coeffs = Vec::<u8>::new();
 
@@ -33,7 +32,7 @@ pub fn to_zkif_lc<Scalar: PrimeField>(
         encode_scalar(coeff, &mut coeffs);
     }
 
-    VariablesOwned { variable_ids, values: Some(coeffs) }
+    Variables { variable_ids, values: Some(coeffs) }
 }
 
 /// Convert bellman Fr to zkInterface little-endian bytes.

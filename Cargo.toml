@@ -21,7 +21,7 @@ path = "src/bin.rs"
 zokrates = ["num-bigint"]
 
 [dependencies]
-zkinterface = { version = "1.1.4" }
+zkinterface = { version = "1.2.0", git = "https://github.com/QED-it/zkinterface", rev = "0fb79c5e" }
 
 bellman = "0.8.0"
 ff = "0.8.0"
