@@ -29,7 +29,7 @@ pub fn to_zkif_lc<Scalar: PrimeField>(
         };
         variable_ids.push(zkid as u64);
 
-        encode_scalar(coeff, &mut coeffs);
+        write_scalar(coeff, &mut coeffs);
     }
 
     Variables { variable_ids, values: Some(coeffs) }
@@ -37,7 +37,7 @@ pub fn to_zkif_lc<Scalar: PrimeField>(
 
 /// Convert bellman Fr to zkInterface little-endian bytes.
 /// TODO: Verify that Scalar::Repr is little-endian.
-pub fn encode_scalar<Scalar: PrimeField>(
+pub fn write_scalar<Scalar: PrimeField>(
     fr: &Scalar,
     writer: &mut impl Write,
 ) {

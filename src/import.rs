@@ -10,13 +10,13 @@ use zkinterface::{
     CircuitHeader, Variables, Result,
     consumers::reader::{Reader, Constraint, Term},
 };
-use crate::export::encode_scalar;
+use crate::export::write_scalar;
 use ff::PrimeField;
 
 
 /// Convert zkInterface little-endian bytes to bellman Fr.
 /// TODO: Verify that Scalar::Repr is little-endian.
-pub fn decode_scalar<Scalar: PrimeField>(
+pub fn read_scalar<Scalar: PrimeField>(
     encoded: &[u8],
 ) -> Scalar {
     let mut repr = Scalar::Repr::default();
@@ -39,7 +39,7 @@ pub fn terms_to_lc<Scalar: PrimeField>(
 ) -> LinearCombination<Scalar> {
     let mut lc = LinearCombination::zero();
     for term in terms {
-        let coeff = decode_scalar(term.value);
+        let coeff = read_scalar(term.value);
         let var = vars.get(&term.id).unwrap().clone();
         lc = lc + (coeff, var);
     }
@@ -72,7 +72,7 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
         let mut values = Vec::<u8>::new();
         for i in inputs {
             let val = i.get_value().unwrap();
-            encode_scalar(&val, &mut values);
+            write_scalar(&val, &mut values);
         }
         Some(values)
     } else {
@@ -117,7 +117,7 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
         for var in output_vars {
             let num = AllocatedNum::alloc(
                 cs.namespace(|| format!("output_{}", var.id)), || {
-                    Ok(decode_scalar(var.value))
+                    Ok(read_scalar(var.value))
                 })?;
 
             // Track output variable.
@@ -132,7 +132,7 @@ pub fn call_gadget<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     for var in private_vars {
         let num = AllocatedNum::alloc(
             cs.namespace(|| format!("local_{}", var.id)), || {
-                Ok(decode_scalar(var.value))
+                Ok(read_scalar(var.value))
             })?;
 
         // Track private variable.

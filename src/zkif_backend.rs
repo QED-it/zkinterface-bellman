@@ -18,7 +18,7 @@ use rand;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
-use super::import::{enforce, decode_scalar};
+use super::import::{enforce, read_scalar};
 pub use zkinterface::Reader;
 use std::error::Error;
 use ff::PrimeField;
@@ -40,7 +40,7 @@ impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
                 eprintln!("Warning: no field_maximum specified in messages, the field may be incompatible.");
             }
             Some(field_maximum) => {
-                let requested: Scalar = decode_scalar(field_maximum);
+                let requested: Scalar = read_scalar(field_maximum);
                 let supported: Scalar = Scalar::one().neg();
                 if requested != supported {
                     eprintln!("Error: This proving system does not support the field specified for this circuit.");
@@ -62,7 +62,7 @@ impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
         for var in public_vars {
             let mut cs = cs.namespace(|| format!("public_{}", var.id));
             let num = AllocatedNum::alloc(&mut cs, || {
-                Ok(decode_scalar(var.value))
+                Ok(read_scalar(var.value))
             })?;
 
             num.inputize(&mut cs)?;
@@ -77,7 +77,7 @@ impl<'a, Scalar: PrimeField> Circuit<Scalar> for ZKIFCircuit<'a> {
         for var in private_vars {
             let num = AllocatedNum::alloc(
                 cs.namespace(|| format!("private_{}", var.id)), || {
-                    Ok(decode_scalar(var.value))
+                    Ok(read_scalar(var.value))
                 })?;
 
             // Track private variable.
@@ -189,7 +189,7 @@ pub fn verify(
             None => Vec::new(),
             Some(instance_variables) => {
                 instance_variables.iter().map(|var|
-                    decode_scalar(var.value)
+                    read_scalar(var.value)
                 ).collect()
             }
         }

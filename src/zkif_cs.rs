@@ -2,17 +2,17 @@ use std::path::Path;
 use std::marker::PhantomData;
 
 use zkinterface::{
-    ConstraintSystem, Witness, Variables, CircuitHeader, KeyValue,
-    producers::statement::{StatementBuilder, FileStore, GadgetCallbacks, Store},
+    ConstraintSystem, Witness, Variables, KeyValue,
+    producers::builder::{StatementBuilder, Sink, FileSink},
 };
 use bellman as bl;
 use bellman::{Variable, Index, LinearCombination, SynthesisError};
 use ff::PrimeField;
-use super::export::{encode_scalar, to_zkif_constraint};
+use super::export::{write_scalar, to_zkif_constraint};
 
 
 pub struct ZkifCS<Scalar: PrimeField> {
-    stmt: StatementBuilder<FileStore>,
+    statement: StatementBuilder<FileSink>,
     constraints: ConstraintSystem,
     proving: bool,
     witness: Vec<u8>,
@@ -22,11 +22,11 @@ pub struct ZkifCS<Scalar: PrimeField> {
 impl<Scalar: PrimeField> ZkifCS<Scalar> {
     /// Must call finish() to finalize the files in the workspace.
     pub fn new(workspace: impl AsRef<Path>, proving: bool) -> Self {
-        let store = FileStore::new(workspace, true, true, false).unwrap();
-        let stmt = StatementBuilder::new(store);
+        let sink = FileSink::new(workspace).unwrap();
+        let statement = StatementBuilder::new(sink);
 
         ZkifCS {
-            stmt,
+            statement,
             constraints: ConstraintSystem::default(),
             proving,
             witness: vec![],
@@ -34,44 +34,33 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
         }
     }
 
-    pub fn finish(mut self, name: &str) {
-        let mut msg = Vec::<u8>::new();
-        self.constraints.write_into(&mut msg).unwrap();
-        self.stmt.receive_constraints(&msg).unwrap();
+    pub fn finish(mut self, name: &str) -> zkinterface::Result<()> {
+        self.statement.push_constraints(self.constraints)?;
 
         if self.proving {
-            let variable_ids = (1..self.stmt.vars.free_variable_id).collect();
+            let variable_ids = (1..self.statement.header.free_variable_id).collect();
             let wit = Witness {
                 assigned_variables: Variables {
                     variable_ids,
                     values: Some(self.witness.clone()),
                 }
             };
-            let mut msg = Vec::<u8>::new();
-            wit.write_into(&mut msg).unwrap();
-            self.stmt.receive_witness(&msg).unwrap();
+            self.statement.push_witness(wit)?;
         }
 
         let negative_one = Scalar::one().neg();
         let mut field_maximum = Vec::<u8>::new();
-        encode_scalar(&negative_one, &mut field_maximum);
+        write_scalar(&negative_one, &mut field_maximum);
 
-        let statement = CircuitHeader {
-            instance_variables: Variables {
-                variable_ids: vec![],
-                values: Some(vec![]),
-            },
-            free_variable_id: self.stmt.vars.free_variable_id,
-            field_maximum: Some(field_maximum),
-            configuration: Some(vec![
-                KeyValue {
-                    key: "name".to_string(),
-                    text: Some(name.to_string()),
-                    data: None,
-                    number: 0,
-                }]),
-        };
-        self.stmt.store.push_main(&statement).unwrap();
+        self.statement.header.field_maximum = Some(field_maximum);
+        self.statement.header.configuration = Some(vec![
+            KeyValue {
+                key: "name".to_string(),
+                text: Some(name.to_string()),
+                data: None,
+                number: 0,
+            }]);
+        self.statement.finish_header()
     }
 }
 
@@ -82,19 +71,24 @@ impl<Scalar: PrimeField> bl::ConstraintSystem<Scalar> for ZkifCS<Scalar> {
         where F: FnOnce() -> Result<Scalar, SynthesisError>,
               A: FnOnce() -> AR, AR: Into<String>
     {
-        let zkid = self.stmt.vars.allocate();
+        let zkid = self.statement.allocate_var();
         if self.proving {
             let fr = f()?;
-            encode_scalar(&fr, &mut self.witness);
+            write_scalar(&fr, &mut self.witness);
         }
         Ok(Variable::new_unchecked(Index::Aux(zkid as usize)))
     }
 
-    fn alloc_input<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    fn alloc_input<F, A, AR>(&mut self, _annotation: A, f: F) -> Result<Variable, SynthesisError>
         where F: FnOnce() -> Result<Scalar, SynthesisError>,
               A: FnOnce() -> AR, AR: Into<String>
     {
-        bl::ConstraintSystem::<Scalar>::alloc(self, annotation, f)
+        let value = f()?;
+        let mut encoded = vec![];
+        write_scalar(&value, &mut encoded);
+
+        let zkid = self.statement.allocate_instance_var(&encoded);
+        Ok(Variable::new_unchecked(Index::Input(zkid as usize)))
     }
 
     fn enforce<A, AR, LA, LB, LC>(&mut self, _annotation: A, a: LA, b: LB, c: LC)
