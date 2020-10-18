@@ -1,6 +1,6 @@
 [package]
 name = "zkinterface_bellman"
-version = "1.2.0"
+version = "1.2.1"
 authors = ["Aurélien Nicolas <aurel@qed-it.com>"]
 license = "MIT"
 edition = "2018"
@@ -21,7 +21,7 @@ path = "src/bin.rs"
 zokrates = ["num-bigint"]
 
 [dependencies]
-zkinterface = { version = "1.2.0" }
+zkinterface = { version = "1.2.1" }
 
 bellman = "0.8.0"
 ff = "0.8.0"

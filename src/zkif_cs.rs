@@ -1,17 +1,17 @@
 use std::path::Path;
 use std::marker::PhantomData;
 
-use zkinterface::{
-    ConstraintSystem, Witness, Variables, KeyValue,
-    producers::builder::{StatementBuilder, Sink, FileSink},
-};
+use zkinterface::{ConstraintSystem, Witness, Variables, KeyValue, producers::builder::{StatementBuilder, Sink, FileSink}, BilinearConstraint};
 use bellman as bl;
 use bellman::{Variable, Index, LinearCombination, SynthesisError};
 use ff::PrimeField;
 use super::export::{write_scalar, to_zkif_constraint};
+use std::mem;
 
 
 pub struct ZkifCS<Scalar: PrimeField> {
+    pub constraints_per_message: usize,
+
     statement: StatementBuilder<FileSink>,
     constraints: ConstraintSystem,
     proving: bool,
@@ -26,6 +26,7 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
         let statement = StatementBuilder::new(sink);
 
         ZkifCS {
+            constraints_per_message: 100000,
             statement,
             constraints: ConstraintSystem::default(),
             proving,
@@ -35,7 +36,9 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
     }
 
     pub fn finish(mut self, name: &str) -> zkinterface::Result<()> {
-        self.statement.push_constraints(self.constraints)?;
+        if self.constraints.constraints.len() > 0 {
+            self.statement.push_constraints(self.constraints)?;
+        }
 
         if self.proving {
             let variable_ids = (1..self.statement.header.free_variable_id).collect();
@@ -61,6 +64,16 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
                 number: 0,
             }]);
         self.statement.finish_header()
+    }
+
+    fn push_constraint(&mut self, co: BilinearConstraint) -> zkinterface::Result<()> {
+        self.constraints.constraints.push(co);
+
+        if self.constraints.constraints.len() >= self.constraints_per_message {
+            let cs = mem::replace(&mut self.constraints, ConstraintSystem::default());
+            self.statement.push_constraints(cs)?;
+        }
+        Ok(())
     }
 }
 
@@ -102,7 +115,7 @@ impl<Scalar: PrimeField> bl::ConstraintSystem<Scalar> for ZkifCS<Scalar> {
         let c = c(LinearCombination::zero());
 
         let co = to_zkif_constraint(a, b, c);
-        self.constraints.constraints.push(co);
+        self.push_constraint(co).unwrap();
     }
 
     fn push_namespace<NR, N>(&mut self, _name_fn: N) where NR: Into<String>, N: FnOnce() -> NR {}
