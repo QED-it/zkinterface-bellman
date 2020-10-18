@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::marker::PhantomData;
 
-use zkinterface::{ConstraintSystem, Witness, Variables, KeyValue, producers::builder::{StatementBuilder, Sink, FileSink}, BilinearConstraint};
+use zkinterface::{ConstraintSystem, Witness, Variables, KeyValue, StatementBuilder, Sink, WorkspaceSink, BilinearConstraint};
 use bellman as bl;
 use bellman::{Variable, Index, LinearCombination, SynthesisError};
 use ff::PrimeField;
@@ -12,7 +12,7 @@ use std::mem;
 pub struct ZkifCS<Scalar: PrimeField> {
     pub constraints_per_message: usize,
 
-    statement: StatementBuilder<FileSink>,
+    statement: StatementBuilder<WorkspaceSink>,
     constraints: ConstraintSystem,
     proving: bool,
     witness: Vec<u8>,
@@ -22,7 +22,7 @@ pub struct ZkifCS<Scalar: PrimeField> {
 impl<Scalar: PrimeField> ZkifCS<Scalar> {
     /// Must call finish() to finalize the files in the workspace.
     pub fn new(workspace: impl AsRef<Path>, proving: bool) -> Self {
-        let sink = FileSink::new(workspace).unwrap();
+        let sink = WorkspaceSink::new(workspace).unwrap();
         let statement = StatementBuilder::new(sink);
 
         ZkifCS {
