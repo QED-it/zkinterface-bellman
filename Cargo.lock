@@ -664,7 +664,7 @@ dependencies = [
 
 [[package]]
 name = "zkinterface"
-version = "1.3.0"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "colored 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -680,7 +680,7 @@ dependencies = [
 
 [[package]]
 name = "zkinterface_bellman"
-version = "1.3.0"
+version = "1.3.2"
 dependencies = [
  "bellman 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bls12_381 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -688,7 +688,7 @@ dependencies = [
  "num-bigint 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pairing 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "zkinterface 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zkinterface 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [metadata]
@@ -776,4 +776,4 @@ dependencies = [
 "checksum winapi-x86_64-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 "checksum wyz 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 "checksum yaml-rust 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "39f0c922f1a334134dc2f7a8b67dc5d25f0735263feec974345ff706bcf20b0d"
-"checksum zkinterface 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d56f428ae0ceeb13786da2c59d1c6c5c14648aa191e01bb807ff9e99c2e5b9d0"
+"checksum zkinterface 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "df096220c257cecee6cddad0303e912f5fe35201390245815301c0e18df798fd"
