@@ -24,6 +24,9 @@ use std::error::Error;
 use ff::PrimeField;
 use bls12_381::{Bls12, Scalar as Bls12Scalar};
 
+const DEFAULT_KEY_PATH: &str = "bellman-pk";
+const DEFAULT_PROOF_PATH: &str = "bellman-proof";
+
 
 /// A circuit instance built from zkif messages.
 #[derive(Clone, Debug)]
@@ -124,7 +127,7 @@ pub fn setup(
     workspace: &Path,
 ) -> Result<(), Box<dyn Error>>
 {
-    let key_path = workspace.join("bellman-pk");
+    let key_path = workspace.join(DEFAULT_KEY_PATH);
 
     let circuit = ZKIFCircuit { reader };
 
@@ -137,6 +140,7 @@ pub fn setup(
     // Store params.
     let file = File::create(&key_path)?;
     params.write(file)?;
+    eprintln!("Written parameters into {}", key_path.display());
 
     Ok(())
 }
@@ -146,13 +150,14 @@ pub fn prove(
     workspace: &Path,
 ) -> Result<(), Box<dyn Error>>
 {
-    let key_path = workspace.join("bellman-pk");
-    let proof_path = workspace.join("bellman-proof");
+    let key_path = workspace.join(DEFAULT_KEY_PATH);
+    let proof_path = workspace.join(DEFAULT_PROOF_PATH);
 
     let circuit = ZKIFCircuit { reader };
 
     // Load params.
     let params = {
+        eprintln!("Reading parameters from {}", key_path.display());
         let mut file = File::open(&key_path)?;
         Parameters::<Bls12>::read(&mut file, false)?
     };
@@ -165,8 +170,9 @@ pub fn prove(
     )?;
 
     // Store proof.
-    let file = File::create(proof_path)?;
+    let file = File::create(&proof_path)?;
     proof.write(file)?;
+    eprintln!("Written proof into {}", proof_path.display());
 
     Ok(())
 }
@@ -175,10 +181,11 @@ pub fn verify(
     reader: &Reader,
     workspace: &Path,
 ) -> Result<(), Box<dyn Error>> {
-    let key_path = workspace.join("bellman-pk");
-    let proof_path = workspace.join("bellman-proof");
+    let key_path = workspace.join(DEFAULT_KEY_PATH);
+    let proof_path = workspace.join(DEFAULT_PROOF_PATH);
 
     let pvk = {
+        eprintln!("Reading parameters from {}", key_path.display());
         let mut file = File::open(&key_path)?;
         let params = Parameters::<Bls12>::read(&mut file, false)?;
         prepare_verifying_key::<Bls12>(&params.vk)
@@ -196,6 +203,7 @@ pub fn verify(
     };
 
     let proof = {
+        eprintln!("Reading proof from {}", proof_path.display());
         let mut file = File::open(&proof_path)?;
         Proof::read(&mut file).unwrap()
     };
