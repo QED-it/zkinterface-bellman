@@ -10,20 +10,30 @@ use std::mem;
 
 const DEFAULT_CONSTRAINTS_PER_MESSAGE: usize = 100000;
 
+#[derive(PartialEq, Copy, Clone)]
+pub enum Target {
+    /// Generate constraints, public inputs, witness.
+    Prover,
+    /// Generate constraints, public inputs.
+    Verifier,
+    /// Generate constraints only.
+    Preprocessing,
+}
 
 pub struct ZkifCS<Scalar: PrimeField> {
     pub constraints_per_message: usize,
 
     statement: StatementBuilder<WorkspaceSink>,
     constraints: ConstraintSystem,
-    proving: bool,
-    witness: Vec<u8>,
+    target: Target,
+    witness_ids: Vec<u64>,
+    witness_encoding: Vec<u8>,
     phantom: PhantomData<Scalar>,
 }
 
 impl<Scalar: PrimeField> ZkifCS<Scalar> {
     /// Must call finish() to finalize the files in the workspace.
-    pub fn new(workspace: impl AsRef<Path>, proving: bool) -> Self {
+    pub fn new(workspace: impl AsRef<Path>, target: Target) -> Self {
         let sink = WorkspaceSink::new(workspace).unwrap();
         let statement = StatementBuilder::new(sink);
 
@@ -31,8 +41,9 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
             constraints_per_message: DEFAULT_CONSTRAINTS_PER_MESSAGE,
             statement,
             constraints: ConstraintSystem::default(),
-            proving,
-            witness: vec![],
+            target,
+            witness_ids: vec![],
+            witness_encoding: vec![],
             phantom: PhantomData,
         }
     }
@@ -42,11 +53,11 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
             self.statement.push_constraints(self.constraints)?;
         }
 
-        if self.proving {
+        if self.target == Target::Prover {
             let wit = Witness {
                 assigned_variables: Variables {
-                    variable_ids: self.statement.header.list_witness_ids(),
-                    values: Some(self.witness.clone()),
+                    variable_ids: self.witness_ids,
+                    values: Some(self.witness_encoding.clone()),
                 }
             };
             self.statement.push_witness(wit)?;
@@ -86,10 +97,13 @@ impl<Scalar: PrimeField> bl::ConstraintSystem<Scalar> for ZkifCS<Scalar> {
               A: FnOnce() -> AR, AR: Into<String>
     {
         let zkid = self.statement.allocate_var();
-        if self.proving {
-            let fr = f()?;
-            write_scalar(&fr, &mut self.witness);
+
+        if self.target == Target::Prover {
+            self.witness_ids.push(zkid);
+            let value = f()?;
+            write_scalar(&value, &mut self.witness_encoding);
         }
+
         Ok(Variable::new_unchecked(Index::Aux(zkid as usize)))
     }
 
@@ -97,11 +111,17 @@ impl<Scalar: PrimeField> bl::ConstraintSystem<Scalar> for ZkifCS<Scalar> {
         where F: FnOnce() -> Result<Scalar, SynthesisError>,
               A: FnOnce() -> AR, AR: Into<String>
     {
-        let value = f()?;
-        let mut encoded = vec![];
-        write_scalar(&value, &mut encoded);
+        let mut encoded_value = vec![];
 
-        let zkid = self.statement.allocate_instance_var(&encoded);
+        match self.target {
+            Target::Prover | Target::Verifier => {
+                let value = f()?;
+                write_scalar(&value, &mut encoded_value);
+            }
+            Target::Preprocessing => { /* Leave value empty (still a valid encoding of 0) */ }
+        }
+
+        let zkid = self.statement.allocate_instance_var(&encoded_value);
         Ok(Variable::new_unchecked(Index::Input(zkid as usize)))
     }
 
@@ -141,7 +161,7 @@ fn test_zkif_cs() -> zkinterface::Result<()> {
     let dir = Path::new("local/test/");
     let _ = remove_dir_all(dir);
 
-    let mut cs = ZkifCS::<Scalar>::new(dir, true);
+    let mut cs = ZkifCS::<Scalar>::new(dir, Target::Prover);
 
     // Create 10 constraints to store in chunks of 4.
     cs.constraints_per_message = 4;
