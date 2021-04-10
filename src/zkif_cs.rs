@@ -9,6 +9,7 @@ use super::export::{write_scalar, to_zkif_constraint};
 use std::mem;
 
 const DEFAULT_CONSTRAINTS_PER_MESSAGE: usize = 100000;
+const DEFAULT_WITNESSES_PER_MESSAGE: usize = 100000;
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum Target {
@@ -22,6 +23,7 @@ pub enum Target {
 
 pub struct ZkifCS<Scalar: PrimeField> {
     pub constraints_per_message: usize,
+    pub witnesses_per_message: usize,
 
     statement: StatementBuilder<WorkspaceSink>,
     constraints: ConstraintSystem,
@@ -39,6 +41,7 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
 
         ZkifCS {
             constraints_per_message: DEFAULT_CONSTRAINTS_PER_MESSAGE,
+            witnesses_per_message: DEFAULT_WITNESSES_PER_MESSAGE,
             statement,
             constraints: ConstraintSystem::default(),
             target,
@@ -49,18 +52,13 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
     }
 
     pub fn finish(mut self, name: &str) -> zkinterface::Result<()> {
-        if self.constraints.constraints.len() > 0 {
-            self.statement.push_constraints(self.constraints)?;
+        if self.target == Target::Prover {
+            // Do this first, before we start moving fields out of `self`
+            self.flush_witness()?;
         }
 
-        if self.target == Target::Prover {
-            let wit = Witness {
-                assigned_variables: Variables {
-                    variable_ids: self.witness_ids,
-                    values: Some(self.witness_encoding.clone()),
-                }
-            };
-            self.statement.push_witness(wit)?;
+        if self.constraints.constraints.len() > 0 {
+            self.statement.push_constraints(self.constraints)?;
         }
 
         let negative_one = Scalar::one().neg();
@@ -87,6 +85,23 @@ impl<Scalar: PrimeField> ZkifCS<Scalar> {
         }
         Ok(())
     }
+
+    fn flush_witness(&mut self) -> zkinterface::Result<()> {
+        if self.witness_ids.len() == 0 {
+            return Ok(());
+        }
+
+        let witness_ids = mem::replace(&mut self.witness_ids, Vec::new());
+        let witness_encoding = mem::replace(&mut self.witness_encoding, Vec::new());
+        let wit = Witness {
+            assigned_variables: Variables {
+                variable_ids: witness_ids,
+                values: Some(witness_encoding),
+            }
+        };
+        self.statement.push_witness(wit)?;
+        Ok(())
+    }
 }
 
 impl<Scalar: PrimeField> bl::ConstraintSystem<Scalar> for ZkifCS<Scalar> {
@@ -102,6 +117,10 @@ impl<Scalar: PrimeField> bl::ConstraintSystem<Scalar> for ZkifCS<Scalar> {
             self.witness_ids.push(zkid);
             let value = f()?;
             write_scalar(&value, &mut self.witness_encoding);
+
+            if self.witness_ids.len() >= self.witnesses_per_message {
+                self.flush_witness().unwrap();
+            }
         }
 
         Ok(Variable::new_unchecked(Index::Aux(zkid as usize)))
